@@ -1,0 +1,9 @@
+[general]
+output = /output
+
+[imap]
+host = ${IMAP_HOST}
+port = ${IMAP_PORT}
+ssl = ${IMAP_SSL}
+user = ${IMAP_USER}
+password = ${IMAP_PASSWORD}
