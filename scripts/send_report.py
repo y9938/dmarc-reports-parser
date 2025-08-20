@@ -11,21 +11,28 @@ from email.utils import formatdate
 def read_reports():
     body_parts = []
     json_files = glob.glob('/output/*.json')
+    has_data = False
     
     for file_path in json_files:
         filename = os.path.basename(file_path)
-        body_parts.append(f"--- Файл: {filename} ---")
         
         with open(file_path, 'r') as f:
-            data = json.load(f)
-            # Форматируем данные как нужно
-            body_parts.append(json.dumps(data, indent=2))
-        body_parts.append("")  # Пустая строка между файлами
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError:
+                continue
+        
+        if not data:
+            continue
+        
+        has_data = True
+        body_parts.append(f"--- Файл: {filename} ---")
+        body_parts.append(json.dumps(data, indent=2))
+        body_parts.append("")
     
-    return '\n'.join(body_parts)
+    return '\n'.join(body_parts), has_data
 
 def send_report():
-    # Настройки email из переменных окружения
     smtp_server = os.getenv('SMTP_SERVER')
     smtp_port = int(os.getenv('SMTP_PORT', '587'))
     username = os.getenv('SMTP_USER')
@@ -37,9 +44,12 @@ def send_report():
         sys.exit(1)
     
     try:
-        # Формируем письмо
         subject = f"DMARC Report - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-        body = read_reports()
+        body, has_data = read_reports()
+
+        if not has_data:
+            print("ℹ️ Отчет пустой — письмо не отправлено")
+            return
         
         msg = MIMEText(body)
         msg['Subject'] = subject
