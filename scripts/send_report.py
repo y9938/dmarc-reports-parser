@@ -11,7 +11,7 @@ from email.utils import formatdate
 def read_reports():
     body_parts = []
     json_files = glob.glob('/output/*.json')
-    has_data = False
+    has_failures = False
     
     for file_path in json_files:
         filename = os.path.basename(file_path)
@@ -24,13 +24,24 @@ def read_reports():
         
         if not data:
             continue
+
+        reports = data if isinstance(data, list) else [data]
         
-        has_data = True
-        body_parts.append(f"--- Файл: {filename} ---")
-        body_parts.append(json.dumps(data, indent=2))
-        body_parts.append("")
+        for rep in reports:
+            records = rep.get("records", [])
+            for rec in records:
+                align = rec.get("alignment", {})
+                if not all(align.get(x, False) for x in ("spf", "dkim", "dmarc")):
+                    has_failures = True
+                    body_parts.append(f"--- Файл: {filename} (обнаружены проблемы) ---")
+                    body_parts.append(json.dumps(data, indent=2, ensure_ascii=False))
+                    body_parts.append("")
+                    # достаточно один раз добавить файл
+                    break
+            if has_failures:
+                break
     
-    return '\n'.join(body_parts), has_data
+    return '\n'.join(body_parts), has_failures
 
 def send_report():
     smtp_server = os.getenv('SMTP_SERVER')
@@ -45,13 +56,13 @@ def send_report():
     
     try:
         subject = f"DMARC Report - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-        body, has_data = read_reports()
+        body, has_failures = read_reports()
 
-        if not has_data:
-            print("ℹ️ Отчет пустой — письмо не отправлено")
+        if not has_failures:
+            print("✅ Все выравнивания SPF/DKIM/DMARC в порядке — письмо не отправлено")
             return
         
-        msg = MIMEText(body)
+        msg = MIMEText(body, _charset="utf-8")
         msg['Subject'] = subject
         msg['From'] = username
         msg['To'] = recipient
@@ -64,8 +75,8 @@ def send_report():
         server.send_message(msg)
         server.quit()
         
-        print("✅ Отчет отправлен")
-        
+        print("✅ Отчет отправлен (есть проблемные записи)")
+         
     except Exception as e:
         print(f"❌ Ошибка отправки: {e}")
         sys.exit(1)
