@@ -19,9 +19,7 @@
 # Измените .env
 cp .env.example .env
 
-# Сборка образа
-docker build -t dmarc-reports-parser:latest .
-
+# Запустите
 ./run_dmarc.sh
 ```
 
